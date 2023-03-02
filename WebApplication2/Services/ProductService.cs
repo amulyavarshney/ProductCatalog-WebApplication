@@ -17,7 +17,7 @@ namespace WebApplication2.Services
             return await _context.Products
                 .Select(p => new ProductViewModel
                 {
-                    ProductId = p.ProductId,
+                    Id = p.Id,
                     Name = p.Name,
                     BasePrice = p.BasePrice,
                     TaxRate = p.TaxRate,
@@ -56,7 +56,7 @@ namespace WebApplication2.Services
         {
             return new ProductViewModel
             {
-                ProductId = product.ProductId,
+                Id = product.Id,
                 Name = product.Name,
                 Description = product.Description,
                 BasePrice = product.BasePrice,
@@ -77,7 +77,7 @@ namespace WebApplication2.Services
 
         private async Task<Product> FromId(int id)
         {
-            return await _context.Products.FirstAsync(p => p.ProductId == id);
+            return await _context.Products.FirstAsync(p => p.Id == id);
         }
     }
 }

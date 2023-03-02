@@ -13,7 +13,7 @@ namespace WebApplication2
             // dependency injection configuration
             builder.Services.AddDbContext<ProductCatalogContext>(options =>
             {
-                options.UseSqlServer(builder.Configuration.GetConnectionString("Development"));
+                options.UseSqlServer(builder.Configuration.GetValue<string>("CONNECTION_STRING"));
             });
             builder.Services.AddControllers();
             builder.Services.AddScoped<IProductService, ProductService>();
