@@ -1,65 +1,103 @@
+using System.Text;
 using BookQuery.Service.Context;
+using BookQuery.Service.Middleware;
 using BookQuery.Service.Models;
 using BookQuery.Service.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 namespace BookQuery.Service
 {
-    /* The above class is the entry point of the application. It creates a web application builder,
-    adds the database context, adds the controllers, adds the hosted service, adds the
-    configuration, adds the services, adds the swagger, builds the application, and runs the
-    application */
     public class Program
     {
-        /// <summary>
-        /// The above function is used to create a web application builder, add a database context, add
-        /// controllers, add a hosted service, configure RabbitMQ, add scoped and singleton services,
-        /// add Swagger, and build the application
-        /// </summary>
-        /// <param name="args">The arguments passed to the application.</param>
         public static void Main(string[] args)
         {
-            /* Creating a web application builder. */
             var builder = WebApplication.CreateBuilder(args);
+            var configuration = builder.Configuration;
+            var connectionString = configuration.GetConnectionString("DefaultConnection")
+                ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is missing.");
 
-            /* Adding the database context to the application. */
             builder.Services.AddDbContext<BookContext>(options =>
             {
-                options.UseSqlServer(builder.Configuration.GetConnectionString("Development"));
+                options.UseSqlServer(connectionString);
             });
 
-            /* Adding the controllers to the application. */
-            builder.Services.AddControllers();
+            var authEnabled = configuration.GetValue("Authentication:Enabled", false);
+            if (authEnabled)
+            {
+                builder.Services.AddControllers(options =>
+                {
+                    options.Filters.Add(new AuthorizeFilter());
+                });
+            }
+            else
+            {
+                builder.Services.AddControllers();
+            }
 
-            /* Adding the hosted service to the application. */
             builder.Services.AddHostedService<RabbitMQConsumerService>();
-
-            /* Configuring the RabbitMQConfig class with the values from the RabbitMQConfig section of
-            the appsettings.json file. */
-            builder.Services.Configure<RabbitMQConfig>(builder.Configuration.GetSection("RabbitMQConfig"));
-
-            /* Adding the BookService class to the application as a scoped service. */
+            builder.Services.Configure<RabbitMQConfig>(configuration.GetSection("RabbitMQConfig"));
             builder.Services.AddScoped<IBookService, BookService>();
+            builder.Services.AddScoped<IBookUpdateService, BookUpdateService>();
 
-            /* Adding the BookUpdateService and BookUpdateContext to the application as a singleton. */
-            builder.Services.AddSingleton<IBookUpdateService, BookUpdateService>();
-            builder.Services.AddSingleton<BookUpdateContext>();
+            ConfigureAuthentication(builder.Services, configuration, authEnabled);
 
-            /* Adding the Swagger documentation to the application. */
+            builder.Services.AddHealthChecks()
+                .AddSqlServer(connectionString, name: "sqlserver")
+                .AddRabbitMQ(BuildRabbitMqConnectionString(configuration), name: "rabbitmq");
+
             builder.Services.AddSwaggerGen(config =>
             {
                 config.SwaggerDoc("v1.0.0", new OpenApiInfo
                 {
-                    Title = "Book Query Service Documentation",
+                    Title = "Book Query Service",
+                    Version = "v1.0.0"
                 });
+
+                if (authEnabled)
+                {
+                    config.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                    {
+                        Description = "JWT Authorization header using the Bearer scheme.",
+                        Name = "Authorization",
+                        In = ParameterLocation.Header,
+                        Type = SecuritySchemeType.Http,
+                        Scheme = "bearer"
+                    });
+                    config.AddSecurityRequirement(new OpenApiSecurityRequirement
+                    {
+                        {
+                            new OpenApiSecurityScheme
+                            {
+                                Reference = new OpenApiReference
+                                {
+                                    Type = ReferenceType.SecurityScheme,
+                                    Id = "Bearer"
+                                }
+                            },
+                            Array.Empty<string>()
+                        }
+                    });
+                }
             });
 
-            /* Building the application. */
             var app = builder.Build();
 
-            /* Checking if the environment is development. If it is, it is adding swagger to the
-            application. */
+            using (var scope = app.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<BookContext>();
+                if (db.Database.IsRelational())
+                {
+                    EnsureDatabaseExists(connectionString);
+                    db.Database.Migrate();
+                }
+            }
+
+            app.UseMiddleware<ExceptionHandlingMiddleware>();
+
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
@@ -69,9 +107,70 @@ namespace BookQuery.Service
                 });
             }
 
-            /* Mapping the controllers and running the application. */
+            if (authEnabled)
+            {
+                app.UseAuthentication();
+                app.UseAuthorization();
+            }
+
             app.MapControllers();
+            app.MapHealthChecks("/health");
             app.Run();
+        }
+
+        private static void ConfigureAuthentication(IServiceCollection services, IConfiguration configuration, bool authEnabled)
+        {
+            if (!authEnabled)
+            {
+                return;
+            }
+
+            var jwtSection = configuration.GetSection("Authentication:Jwt");
+            var key = jwtSection["Key"] ?? "BookCatalogDevSigningKey_ChangeMe_32chars!";
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+                        ValidIssuer = jwtSection["Issuer"] ?? "BookCatalog",
+                        ValidAudience = jwtSection["Audience"] ?? "BookCatalog",
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
+                    };
+                });
+            services.AddAuthorization();
+        }
+
+        private static void EnsureDatabaseExists(string connectionString)
+        {
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connectionString);
+            var databaseName = builder.InitialCatalog;
+            if (string.IsNullOrWhiteSpace(databaseName))
+            {
+                return;
+            }
+
+            builder.InitialCatalog = "master";
+            using var connection = new Microsoft.Data.SqlClient.SqlConnection(builder.ConnectionString);
+            connection.Open();
+            using var command = connection.CreateCommand();
+            var safeName = databaseName.Replace("]", "]]");
+            command.CommandText = $"IF DB_ID(N'{safeName}') IS NULL CREATE DATABASE [{safeName}]";
+            command.ExecuteNonQuery();
+        }
+
+        private static string BuildRabbitMqConnectionString(IConfiguration configuration)
+        {
+            var cfg = configuration.GetSection("RabbitMQConfig");
+            var user = cfg["UserName"] ?? "guest";
+            var password = cfg["Password"] ?? "guest";
+            var host = cfg["HostName"] ?? "localhost";
+            var port = cfg["Port"] ?? "5672";
+            var vhost = Uri.EscapeDataString(cfg["VirtualHost"] ?? "/");
+            return $"amqp://{user}:{password}@{host}:{port}/{vhost}";
         }
     }
 }

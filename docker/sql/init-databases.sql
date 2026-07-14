@@ -1,0 +1,11 @@
+IF DB_ID(N'BookCommand') IS NULL
+BEGIN
+    CREATE DATABASE BookCommand;
+END
+GO
+
+IF DB_ID(N'BookQuery') IS NULL
+BEGIN
+    CREATE DATABASE BookQuery;
+END
+GO

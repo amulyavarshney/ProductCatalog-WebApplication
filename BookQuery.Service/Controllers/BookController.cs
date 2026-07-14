@@ -1,46 +1,49 @@
-﻿using BookQuery.Service.ViewModels;
+﻿using BookCatalog.Contracts.Dtos;
+using BookCatalog.Contracts.Exceptions;
 using BookQuery.Service.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookQuery.Service.Controllers
 {
-    /* The BookController class is a controller class that handles HTTP requests and responses */
     [Route("api/v1/[controller]")]
     [ApiController]
     public class BookController : ControllerBase
     {
-        /* This is a constructor that takes in a service and assigns it to a private variable. */
         private readonly IBookService _service;
+
         public BookController(IBookService service)
         {
             _service = service;
         }
 
         /// <summary>
-        /// It returns a list of books from the database
+        /// Returns a paged list of books.
         /// </summary>
-        /// <returns>
-        /// A list of BookViewModel objects.
-        /// </returns>
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<BookViewModel>>> GetAsync()
+        public async Task<ActionResult<PagedResult<BookDto>>> GetAsync([FromQuery] BookQueryParameters parameters)
         {
-            return Ok(await _service.GetAllAsync());
+            return Ok(await _service.GetAsync(parameters));
         }
 
         /// <summary>
-        /// This function is a GET request that takes an integer as a parameter and returns a
-        /// BookViewModel object
+        /// Returns a single book by id.
         /// </summary>
-        /// <param name="id">int - This is the route parameter. It's the id of the book we want to
-        /// get.</param>
-        /// <returns>
-        /// The GetByIdAsync method is returning a BookViewModel object.
-        /// </returns>
-        [HttpGet("{id:int}")]
-        public async Task<ActionResult<BookViewModel>> GetByIdAsync(int id)
+        [HttpGet("{id:int}", Name = "GetBookById")]
+        public async Task<ActionResult<BookDto>> GetByIdAsync(int id)
         {
-            return Ok(await _service.GetByIdAsync(id));
+            try
+            {
+                return Ok(await _service.GetByIdAsync(id));
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Resource not found",
+                    Detail = ex.Message
+                });
+            }
         }
     }
 }
