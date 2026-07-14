@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Product Catalog — Book Library</title>
-  <meta name="description" content="CQRS product catalog demo: browse, search, create, update, and remove books." />
+  <title>Book Catalog — CQRS Demo</title>
+  <meta name="description" content="CQRS book catalog demo: browse, search, create, update, and soft-delete books." />
+  <base href="./" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
@@ -15,8 +16,8 @@
 
   <header class="site-header">
     <div class="brand-lockup">
-      <p class="brand">Product Catalog</p>
-      <p class="brand-sub">CQRS book library demo</p>
+      <p class="brand">Book Catalog</p>
+      <p class="brand-sub">CQRS microservices demo</p>
     </div>
     <div class="header-actions">
       <label class="mode-toggle" title="Demo uses browser storage; API talks to a local gateway">
@@ -26,6 +27,7 @@
           <option value="api">Live API</option>
         </select>
       </label>
+      <button type="button" class="btn btn-ghost" id="resetDemo" title="Restore seed books in demo mode">Reset demo</button>
       <button type="button" class="btn btn-primary" id="openCreate">Add book</button>
     </div>
   </header>
@@ -34,6 +36,12 @@
     <section class="hero">
       <h1>Find the next shelf-worthy title.</h1>
       <p class="lede">Search, filter, and manage the catalog — create, update, and soft-delete books with the same flows as the microservices API.</p>
+      <ul class="flow-pills" aria-label="Architecture">
+        <li>Command</li>
+        <li>Outbox</li>
+        <li>RabbitMQ</li>
+        <li>Query</li>
+      </ul>
     </section>
 
     <section class="toolbar" aria-label="Catalog filters">
@@ -86,7 +94,7 @@
 
   <footer class="site-footer">
     <p>ASP.NET Core CQRS sample · Command / Query / Outbox / RabbitMQ</p>
-    <p><a href="https://github.com/amulyavarshney/product-catalog" rel="noopener">Source on GitHub</a></p>
+    <p><a id="repoLink" href="https://github.com/amulyavarshney/book-catalog" rel="noopener">Source on GitHub</a></p>
   </footer>
 
   <dialog id="bookDialog" class="dialog">

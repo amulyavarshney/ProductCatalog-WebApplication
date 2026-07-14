@@ -1,14 +1,16 @@
-# Product Catalog
+# Book Catalog
 
-CQRS product catalog for books — ASP.NET Core 6 microservices with a live demo UI.
+CQRS book catalog — ASP.NET Core 6 microservices with a live demo UI.
 
-**Demo:** [https://amulyavarshney.github.io/product-catalog/](https://amulyavarshney.github.io/product-catalog/)
+**Demo:** [https://amulyavarshney.github.io/book-catalog/](https://amulyavarshney.github.io/book-catalog/)
+
+**Repo:** [github.com/amulyavarshney/book-catalog](https://github.com/amulyavarshney/book-catalog)
 
 ## What you get
 
 | Piece | Role |
 |-------|------|
-| **Demo UI** (`docs/`) | Browse, search, filter, sort, paginate, create, update, delete |
+| **Demo UI** (`docs/`) | Browse, search, filter, sort, paginate, create, update, soft-delete |
 | **BookCommand.Service** | Write API + transactional outbox |
 | **BookQuery.Service** | Read API + RabbitMQ consumer (idempotent soft-delete projection) |
 | **BookCatalog.Gateway** | YARP reverse proxy (`:8080`) |
@@ -29,14 +31,15 @@ Client / Demo UI
 
 Open the GitHub Pages site, or open `docs/index.html` locally.
 
-- **Demo (local)** — full CRUD in browser storage (works offline on Pages)
+- **Demo (local)** — full CRUD in browser storage (works offline on Pages), including soft-delete
 - **Live API** — talk to a running gateway (`http://localhost:8080` by default)
+- **Reset demo** — restore seed books in demo mode
 
 Features mirrored from the API:
 
 - List with `search`, `author`, `sortBy`, `sortDir`, `page`, `pageSize`
 - Create / update (including **title**)
-- Soft-delete semantics on the services; demo mode removes the row from local storage
+- Soft-delete on both sides of the services; demo mode marks books deleted locally
 
 ## Quick start (Docker)
 
@@ -46,7 +49,7 @@ docker compose up --build
 
 | Service | URL |
 |---------|-----|
-| Demo UI (Pages) | https://amulyavarshney.github.io/product-catalog/ |
+| Demo UI (Pages) | https://amulyavarshney.github.io/book-catalog/ |
 | Gateway | http://localhost:8080 |
 | Command API | http://localhost:5001 |
 | Query API | http://localhost:5002 |
@@ -117,7 +120,7 @@ dotnet test BookCatalog.Tests
 
 ## GitHub Pages
 
-This repo publishes the `docs/` folder to GitHub Pages (project site path `/product-catalog/`).
+The `docs/` folder is published via `.github/workflows/deploy-pages.yml` to the project site at `/book-catalog/`.
 
 ## License
 

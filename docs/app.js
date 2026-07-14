@@ -1,14 +1,14 @@
 (() => {
-  const STORAGE_KEY = "product-catalog.books.v1";
-  const SETTINGS_KEY = "product-catalog.settings.v1";
+  const STORAGE_KEY = "book-catalog.books.v2";
+  const SETTINGS_KEY = "book-catalog.settings.v1";
 
   const seedBooks = [
-    { id: 1, title: "Clean Code", author: "Robert C. Martin", description: "A handbook of agile software craftsmanship" },
-    { id: 2, title: "Domain-Driven Design", author: "Eric Evans", description: "Tackling complexity in the heart of software" },
-    { id: 3, title: "Designing Data-Intensive Applications", author: "Martin Kleppmann", description: "Reliability, scalability, and maintainability" },
-    { id: 4, title: "The Pragmatic Programmer", author: "Andrew Hunt", description: "Your journey to mastery" },
-    { id: 5, title: "Refactoring", author: "Martin Fowler", description: "Improving the design of existing code" },
-    { id: 6, title: "Building Microservices", author: "Sam Newman", description: "Designing fine-grained systems" }
+    { id: 1, title: "Clean Code", author: "Robert C. Martin", description: "A handbook of agile software craftsmanship", isDeleted: false },
+    { id: 2, title: "Domain-Driven Design", author: "Eric Evans", description: "Tackling complexity in the heart of software", isDeleted: false },
+    { id: 3, title: "Designing Data-Intensive Applications", author: "Martin Kleppmann", description: "Reliability, scalability, and maintainability", isDeleted: false },
+    { id: 4, title: "The Pragmatic Programmer", author: "Andrew Hunt", description: "Your journey to mastery", isDeleted: false },
+    { id: 5, title: "Refactoring", author: "Martin Fowler", description: "Improving the design of existing code", isDeleted: false },
+    { id: 6, title: "Building Microservices", author: "Sam Newman", description: "Designing fine-grained systems", isDeleted: false }
   ];
 
   const el = {
@@ -26,6 +26,7 @@
     pageInfo: document.getElementById("pageInfo"),
     dataMode: document.getElementById("dataMode"),
     openCreate: document.getElementById("openCreate"),
+    resetDemo: document.getElementById("resetDemo"),
     bookDialog: document.getElementById("bookDialog"),
     bookForm: document.getElementById("bookForm"),
     dialogTitle: document.getElementById("dialogTitle"),
@@ -69,18 +70,31 @@
     }));
   }
 
-  function loadDemoBooks() {
+  function normalizeBook(book) {
+    return {
+      id: Number(book.id),
+      title: book.title || "",
+      author: book.author || "",
+      description: book.description || "",
+      isDeleted: Boolean(book.isDeleted)
+    };
+  }
+
+  function loadDemoBooks({ includeDeleted = false } = {}) {
     const raw = localStorage.getItem(STORAGE_KEY);
+    let books;
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seedBooks));
-      return [...seedBooks];
+      books = seedBooks.map(normalizeBook);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+    } else {
+      try {
+        books = JSON.parse(raw).map(normalizeBook);
+      } catch {
+        books = seedBooks.map(normalizeBook);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+      }
     }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seedBooks));
-      return [...seedBooks];
-    }
+    return includeDeleted ? books : books.filter((b) => !b.isDeleted);
   }
 
   function saveDemoBooks(books) {
@@ -148,9 +162,9 @@
 
   async function createBook(payload) {
     if (state.mode === "demo") {
-      const books = loadDemoBooks();
+      const books = loadDemoBooks({ includeDeleted: true });
       const id = books.reduce((m, b) => Math.max(m, Number(b.id) || 0), 0) + 1;
-      books.push({ id, ...payload });
+      books.push(normalizeBook({ id, ...payload, isDeleted: false }));
       saveDemoBooks(books);
       return;
     }
@@ -164,10 +178,10 @@
 
   async function updateBook(id, payload) {
     if (state.mode === "demo") {
-      const books = loadDemoBooks();
-      const idx = books.findIndex((b) => Number(b.id) === Number(id));
+      const books = loadDemoBooks({ includeDeleted: true });
+      const idx = books.findIndex((b) => Number(b.id) === Number(id) && !b.isDeleted);
       if (idx < 0) throw new Error("Book not found");
-      books[idx] = { ...books[idx], ...payload };
+      books[idx] = normalizeBook({ ...books[idx], ...payload, isDeleted: false });
       saveDemoBooks(books);
       return;
     }
@@ -181,7 +195,10 @@
 
   async function deleteBook(id) {
     if (state.mode === "demo") {
-      const books = loadDemoBooks().filter((b) => Number(b.id) !== Number(id));
+      const books = loadDemoBooks({ includeDeleted: true });
+      const idx = books.findIndex((b) => Number(b.id) === Number(id) && !b.isDeleted);
+      if (idx < 0) throw new Error("Book not found");
+      books[idx].isDeleted = true;
       saveDemoBooks(books);
       return;
     }
@@ -335,6 +352,17 @@
   });
 
   el.openCreate.addEventListener("click", openCreateDialog);
+  el.resetDemo.addEventListener("click", () => {
+    if (state.mode !== "demo") {
+      toast("Switch to Demo mode to reset local data");
+      return;
+    }
+    if (!confirm("Reset demo catalog to the seed books?")) return;
+    saveDemoBooks(seedBooks.map(normalizeBook));
+    state.page = 1;
+    toast("Demo catalog reset");
+    refresh();
+  });
   el.closeDialog.addEventListener("click", () => el.bookDialog.close());
   el.cancelDialog.addEventListener("click", () => el.bookDialog.close());
   el.closeApiDialog.addEventListener("click", () => el.apiDialog.close());

@@ -74,6 +74,32 @@ main,
   line-height: 1.05;
 }
 
+.flow-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 1.25rem 0 0;
+  animation: rise 0.9s ease 0.12s both;
+}
+
+.flow-pills li {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.flow-pills li:not(:last-child)::after {
+  content: "→";
+  margin-left: 0.55rem;
+  color: var(--accent);
+}
+
 .brand-sub {
   margin: 0.2rem 0 0;
   color: rgba(16, 35, 31, 0.65);
