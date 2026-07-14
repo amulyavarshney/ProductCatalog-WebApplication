@@ -1,27 +1,42 @@
-# AspNetCore6.Microservices.BookCatalog
+# Product Catalog
 
-CQRS book catalog built with ASP.NET Core 6: separate write/read microservices, transactional outbox, RabbitMQ projection, YARP gateway, and Docker Compose for local runs.
+CQRS product catalog for books — ASP.NET Core 6 microservices with a live demo UI.
 
-## Architecture
+**Demo:** [https://amulyavarshney.github.io/product-catalog/](https://amulyavarshney.github.io/product-catalog/)
+
+## What you get
+
+| Piece | Role |
+|-------|------|
+| **Demo UI** (`docs/`) | Browse, search, filter, sort, paginate, create, update, delete |
+| **BookCommand.Service** | Write API + transactional outbox |
+| **BookQuery.Service** | Read API + RabbitMQ consumer (idempotent soft-delete projection) |
+| **BookCatalog.Gateway** | YARP reverse proxy (`:8080`) |
+| **BookCatalog.Contracts** | Shared DTOs, events, exceptions |
+| **BookCatalog.Tests** | Unit + API contract tests |
+| **docker-compose** | SQL Server, RabbitMQ, both services, gateway |
+
+Architecture:
 
 ```
-Client → Gateway (:8080)
-           ├─ /command/**  → BookCommand.Service (:5001) → BookCommand DB
-           │                      └─ Outbox → RabbitMQ
-           └─ /query/**    → BookQuery.Service (:5002)  → BookQuery DB
-                                  └─ Consumer ← RabbitMQ
+Client / Demo UI
+    → Gateway (:8080)
+         ├─ /command/**  → BookCommand (:5001) → BookCommand DB → Outbox → RabbitMQ
+         └─ /query/**    → BookQuery (:5002)  ← RabbitMQ → BookQuery DB
 ```
 
-- **BookCommand.Service** — create/update/soft-delete; persists outbox rows in the same DB transaction, then a background publisher sends events to RabbitMQ.
-- **BookQuery.Service** — paged reads; consumer applies events idempotently (upsert + soft-delete) into the read model.
-- **BookCatalog.Contracts** — shared DTOs, events, and exceptions.
-- **BookCatalog.Gateway** — YARP reverse proxy on port `8080`.
+## Demo UI
 
-Soft-delete is used on **both** sides (`IsDeleted` + EF query filters).
+Open the GitHub Pages site, or open `docs/index.html` locally.
 
-## Technologies
+- **Demo (local)** — full CRUD in browser storage (works offline on Pages)
+- **Live API** — talk to a running gateway (`http://localhost:8080` by default)
 
-- ASP.NET Core 6 / EF Core 7 / SQL Server / RabbitMQ / YARP / Swagger / xUnit
+Features mirrored from the API:
+
+- List with `search`, `author`, `sortBy`, `sortDir`, `page`, `pageSize`
+- Create / update (including **title**)
+- Soft-delete semantics on the services; demo mode removes the row from local storage
 
 ## Quick start (Docker)
 
@@ -29,38 +44,31 @@ Soft-delete is used on **both** sides (`IsDeleted` + EF query filters).
 docker compose up --build
 ```
 
-Services:
-
 | Service | URL |
 |---------|-----|
+| Demo UI (Pages) | https://amulyavarshney.github.io/product-catalog/ |
 | Gateway | http://localhost:8080 |
 | Command API | http://localhost:5001 |
 | Query API | http://localhost:5002 |
-| RabbitMQ management | http://localhost:15672 (guest/guest) |
+| RabbitMQ UI | http://localhost:15672 (`guest` / `guest`) |
 
-Examples via gateway:
+Gateway examples:
 
 ```bash
-# Create
 curl -X POST http://localhost:8080/command/api/v1/book \
   -H "Content-Type: application/json" \
   -d '{"title":"Clean Code","description":"A handbook","author":"Robert C. Martin"}'
 
-# List (paged)
-curl "http://localhost:8080/query/api/v1/book?page=1&pageSize=20&search=clean&sortBy=title&sortDir=asc"
-
-# Get by id
-curl http://localhost:8080/query/api/v1/book/1
+curl "http://localhost:8080/query/api/v1/book?page=1&pageSize=20&search=clean&sortBy=title"
 ```
 
-Health: `GET /health` on each service (and the gateway).
+Health: `GET /health` on each service and the gateway.
 
 ## Local run (without Docker)
 
 1. Start SQL Server and RabbitMQ.
-2. Create databases `BookCommand` and `BookQuery` (or let EF migrations create schema after DBs exist).
-3. Update `ConnectionStrings:DefaultConnection` and `RabbitMQConfig` in each service `appsettings.json`.
-4. Run:
+2. Set `ConnectionStrings:DefaultConnection` and `RabbitMQConfig` in each service `appsettings.json`.
+3. Run:
 
 ```bash
 dotnet run --project BookCommand.Service
@@ -68,49 +76,36 @@ dotnet run --project BookQuery.Service
 dotnet run --project BookCatalog.Gateway
 ```
 
-Migrations apply automatically on startup when using a relational database.
+EF migrations create schema on startup (and create the database if missing).
 
 ## API
 
-### Command (`/api/v1/book`)
+### Command — `/api/v1/book`
 
-| Method | Path | Status | Notes |
-|--------|------|--------|-------|
-| POST | `/api/v1/book` | 201 | Body: `title` (required, max 50), `description`, `author` |
-| PUT | `/api/v1/book/{id}` | 204 | Updates title, description, author |
-| DELETE | `/api/v1/book/{id}` | 204 | Soft-delete |
+| Method | Path | Status |
+|--------|------|--------|
+| POST | `/api/v1/book` | 201 |
+| PUT | `/api/v1/book/{id}` | 204 |
+| DELETE | `/api/v1/book/{id}` | 204 |
 
-### Query (`/api/v1/book`)
+### Query — `/api/v1/book`
 
-| Method | Path | Status | Notes |
-|--------|------|--------|-------|
-| GET | `/api/v1/book` | 200 | Query: `page`, `pageSize` (max 100), `search`, `author`, `sortBy`, `sortDir` |
-| GET | `/api/v1/book/{id}` | 200/404 | Single book |
+| Method | Path | Status |
+|--------|------|--------|
+| GET | `/api/v1/book` | 200 (paged) |
+| GET | `/api/v1/book/{id}` | 200 / 404 |
 
-Swagger is available in Development at `/swagger` on each service.
+Swagger is enabled in Development at `/swagger`.
 
-## Authentication (optional)
+## Authentication
 
-JWT bearer is wired but **disabled by default** (`Authentication:Enabled: false`). When enabled, set:
-
-```json
-"Authentication": {
-  "Enabled": true,
-  "Jwt": {
-    "Issuer": "BookCatalog",
-    "Audience": "BookCatalog",
-    "Key": "a-long-secret-key-at-least-32-chars"
-  }
-}
-```
-
-Controllers use a global `[Authorize]` filter when `Authentication:Enabled` is `true`. With auth disabled (default), endpoints remain open for local demos.
+JWT is optional (`Authentication:Enabled`, default `false`). When enabled, a global authorize filter protects controllers.
 
 ## Configuration
 
 | Key | Purpose |
 |-----|---------|
-| `ConnectionStrings:DefaultConnection` | SQL Server connection |
+| `ConnectionStrings:DefaultConnection` | SQL Server |
 | `RabbitMQConfig:*` | Host, credentials, exchange, queue, routing key, DLQ |
 | `Authentication:Enabled` | Toggle JWT |
 
@@ -120,15 +115,10 @@ Controllers use a global `[Authorize]` filter when `Authentication:Enabled` is `
 dotnet test BookCatalog.Tests
 ```
 
-Covers command outbox writes, idempotent query projections (including soft-delete), and HTTP contracts (201/400/404/pagination).
+## GitHub Pages
 
-## Project layout
+This repo publishes the `docs/` folder to GitHub Pages (project site path `/product-catalog/`).
 
-```
-BookCatalog.Contracts/     Shared DTOs and events
-BookCommand.Service/       Write side + outbox publisher
-BookQuery.Service/         Read side + RabbitMQ consumer
-BookCatalog.Gateway/       YARP gateway
-BookCatalog.Tests/         Unit + API tests
-docker-compose.yml
-```
+## License
+
+See [LICENSE.txt](LICENSE.txt).
